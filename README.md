@@ -29,16 +29,20 @@ RECEPIENTEMAILADDRESS, SENDEMAILADDRESS
 
 ## Package and deploy
 
-Package lambda and lambda layer and upload to a S3 bucket. It will output S3 version of artifacts once those artifacts are uploaded.
+### Package lambda and lambda layer 
+Use the following script to package and upload to a S3 bucket. 
+It will output S3 version of artifacts once those artifacts are uploaded.
 
 $ ./package_deploy.sh
 
-    deploy cloud formation stack.
+### deploy cloud formation stack.
 
-You can deploy vis cloud formation console or use the follwoing command:
+You can deploy via cloud formation console or use the following command:
 
 $ aws cloudformation deploy --template ./ercot-dam-notif-lambda.cfn.yml --stack-name ercot-dam-notif-stack
 --parameter-overrides \
 SharedBucketName=< s3 artifact bucket> \
-ErcotDAMNotifLambdaArtifactS3Version=<> \
-ErcotDAMNotifLambdaLayerArtifactS3Version=<>
+ErcotDAMNotifLambdaArtifactS3Version=<ErcotDAMNotifLambdaArtifactS3Version> \
+ErcotDAMNotifLambdaLayerArtifactS3Version=<ErcotDAMNotifLambdaLayerArtifactS3Version>
+
+Please use the actual s3 object versions from previous step.
