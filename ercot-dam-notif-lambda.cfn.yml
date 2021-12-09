@@ -1,0 +1,218 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Twitter DM notification serverless App"
+
+Parameters:
+  SharedBucketName:
+    Type: String
+    Description: Shared bucket name containing the deployable artifact
+  ErcotDAMNotifLambdaArtifactS3Key:
+    Type: String
+    Description: The S3 key of the Template Process Lambda artifact
+    Default: 'ercot-dam-notif-lambda.zip'
+  ErcotDAMNotifLambdaArtifactS3Version:
+    Type: String
+    Description: The S3 version of the Template Process Lambda artifact
+  ErcotDAMNotifLambdaLayerArtifactS3Key:
+    Type: String
+    Description: The S3 key of the Template Process Lambda layer artifact
+    Default: 'ercot-dam-notif-lambda-layer.zip'
+  ErcotDAMNotifLambdaLayerArtifactS3Version:
+    Type: String
+    Description: The S3 version of the Template Process Lambda layer artifact
+  SENDEMAILADDRESS:
+    Type: String  
+    Description: Sender email address for email notification
+    Default: 'Ming Chen <ming@innoblock.us>'
+  RECEPIENTEMAILADDRESS:
+    Type: String  
+    Description: Recepient email address for email notification
+    Default: 'ming.chen@gmail.com'
+  LogLevel:
+    Type: String
+    Description: The log level that the API should log at
+    AllowedValues: ["NOTSET", "DEBUG", "INFO", "WARNING", "ERROR"]
+    Default: 'INFO'
+ 
+Resources:
+  ErcotDAMNotifLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: ErcotDAMNotifLambdaRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: ErcotDAMNotif-policy
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Sid: ForS3BucketAccess
+              Effect: Allow
+              Action:
+                - s3:CreateBucket
+                - s3:ListBucket
+                - s3:ListObject*
+                - S3:GetObject
+                - S3:PutObject
+                - S3:DeleteObject
+                - S3:PutObjectACL
+                - s3:PutEncryptionConfiguration
+                - s3:PutObjectTagging
+                - s3:PutObjectVersionTagging
+              Resource:
+                - !Sub 'arn:aws:s3:::${SharedBucketName}'
+                - !Sub 'arn:aws:s3:::${SharedBucketName}/*'
+            - Sid: DynamoDBReadWritePolicy
+              Effect: Allow
+              Action:
+                - dynamodb:*
+              Resource:
+                - "*"
+            - Sid: ForCloudWatchAccess
+              Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - logs:DescribeLogStreams
+                - logs:PutMetricData
+              Resource: 'arn:aws:logs:*:*:*'
+            - Sid: LambdaPerms
+              Effect: Allow
+              Action:
+                - lambda:GetFunction
+                - lambda:GetFunctionConfiguration
+                - lambda:InvokeFunction
+              Resource:
+                - "*"
+            - Sid: CustomCWMetrics
+              Effect: Allow
+              Action:
+                - cloudwatch:PutMetricData
+              Resource:
+                - "*"
+            - Sid: AccessToSSM
+              Effect: Allow
+              Action:
+                - ssm:GetParameter*
+              Resource:
+                - "*"
+            - Sid: AccessToSES
+              Effect: Allow
+              Action:
+                - ses:*
+              Resource:
+                - "*"
+  ErcotDAMNotifDynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: "Ercot-DAM-Notif"
+      AttributeDefinitions:
+        - AttributeName: "operday"
+          AttributeType: "S"
+        - AttributeName: "hourending"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "operday"
+          KeyType: "HASH"
+        - AttributeName: "hourending"
+          KeyType: "RANGE"
+      BillingMode: PAY_PER_REQUEST
+
+  DynamoScalingRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - "application-autoscaling.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "dynamodb:DescribeTable"
+                  - "dynamodb:UpdateTable"
+                  - "cloudwatch:PutMetricAlarm"
+                  - "cloudwatch:DescribeAlarms"
+                  - "cloudwatch:GetMetricStatistics"
+                  - "cloudwatch:SetAlarmState"
+                  - "cloudwatch:DeleteAlarms"
+                Resource: "*"
+
+  ErcotDAMNotifLambdaLayer:
+    Type: "AWS::Lambda::LayerVersion"
+    Properties:
+      CompatibleRuntimes: 
+        - python3.8
+      Content: 
+        S3Bucket: !Ref SharedBucketName
+        S3Key: !Ref ErcotDAMNotifLambdaLayerArtifactS3Key
+        S3ObjectVersion: !Ref ErcotDAMNotifLambdaLayerArtifactS3Version
+      Description: Lambda Layer for ERCOR DAM notification
+      LayerName: ErcotDAMNotifLambdaLayer
+      LicenseInfo: MIT
+  ErcotDAMNotifLayerPermission:
+    Type: "AWS::Lambda::LayerVersionPermission"
+    Properties:
+      Action: lambda:GetLayerVersion
+      LayerVersionArn: !Ref ErcotDAMNotifLambdaLayer
+      Principal: !Ref AWS::AccountId
+  ErcotDAMNotifLambda:
+    Type: "AWS::Lambda::Function"
+    DependsOn:
+      - ErcotDAMNotifLambdaRole
+      - ErcotDAMNotifLambdaLayer
+    Properties:
+      Code:
+        S3Bucket: !Ref SharedBucketName
+        S3Key: !Ref ErcotDAMNotifLambdaArtifactS3Key
+        S3ObjectVersion: !Ref ErcotDAMNotifLambdaArtifactS3Version
+      Description: "Lambda to process ercot DAM and send notification"
+      FunctionName:  ErcotDAMNotifLambda
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.8
+      Timeout: 900
+      MemorySize: 256
+      Role: !GetAtt ErcotDAMNotifLambdaRole.Arn
+      Layers:
+        - !Ref ErcotDAMNotifLambdaLayer
+      Environment:
+        Variables:
+          TABLENAME_OVERRIDE: Ercot-DAM-Notif
+          LOG_LEVEL: !Ref LogLevel
+          SEND_EMAIL_ADDRESS: !Ref SENDEMAILADDRESS
+          RECEPIENT_EMAIL_ADDRESS: !Ref RECEPIENTEMAILADDRESS
+  ErcotDAMNotifScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: ErcotDAMNotifSchedule
+      Description: "Scheduled rule to poll ERCOR DAM and send notification if new"
+      ScheduleExpression: "cron(30 20 * * ? *)"
+      State: "DISABLED"
+      Targets:
+        -
+          Arn: !GetAtt ErcotDAMNotifLambda.Arn
+          Id: "ErcotDAMNotifLambda"
+  PermissionForEventsToInvokeErcotDAMNotifLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ErcotDAMNotifLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt ErcotDAMNotifScheduleRule.Arn
