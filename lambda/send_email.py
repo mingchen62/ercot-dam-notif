@@ -1,6 +1,7 @@
 import boto3
 from botocore.exceptions import ClientError
 import logging
+import os
 
 # Create a new SES resource
 client = boto3.client('ses')
@@ -8,9 +9,11 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 CHARSET = "UTF-8"
-RECIPIENT = "ming@innoblock.us"
-SENDER = "ming@innoblock.us"
-SUPPORT = "ming@innoblock.us"
+RECIPIENT_DEFAULT = "xyz"
+RECIPIENT = os.environ.get('RECEPIENT_EMAIL_ADDRESS', RECIPIENT_DEFAULT)
+SENDER_DEFAULT = "zyx"
+SENDER = os.environ.get('SEND_EMAIL_ADDRESS',SENDER_DEFAULT)
+SUPPORT = "xyz"
 
 class HTML:
 
