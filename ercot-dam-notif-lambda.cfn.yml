@@ -22,11 +22,9 @@ Parameters:
   SENDEMAILADDRESS:
     Type: String  
     Description: Sender email address for email notification
-    Default: 'Ming Chen <ming@innoblock.us>'
   RECEPIENTEMAILADDRESS:
     Type: String  
     Description: Recepient email address for email notification
-    Default: 'ming.chen@gmail.com'
   LogLevel:
     Type: String
     Description: The log level that the API should log at
