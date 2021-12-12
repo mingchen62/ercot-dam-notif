@@ -200,7 +200,7 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Name: ErcotDAMNotifSchedule
-      Description: "Scheduled rule to poll ERCOR DAM and send notification if new"
+      Description: "Scheduled rule to poll ERCOT DAM and send notification if new"
       ScheduleExpression: "cron(30 20 * * ? *)"
       State: "DISABLED"
       Targets:

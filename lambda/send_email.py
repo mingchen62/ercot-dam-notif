@@ -9,11 +9,12 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 CHARSET = "UTF-8"
-RECIPIENT_DEFAULT = "xyz"
+RECIPIENT_DEFAULT = "ming@innoblock.us"
 RECIPIENT = os.environ.get('RECEPIENT_EMAIL_ADDRESS', RECIPIENT_DEFAULT)
-SENDER_DEFAULT = "zyx"
+RECIPIENT = RECIPIENT.split(',')
+SENDER_DEFAULT = "ming@innoblock.us"
 SENDER = os.environ.get('SEND_EMAIL_ADDRESS',SENDER_DEFAULT)
-SUPPORT = "xyz"
+SUPPORT = ["ming@innoblock.us"]
 
 class HTML:
 
@@ -76,9 +77,8 @@ def send_email_via_ses(send_to_email, subject, body_html):
         #Provide the contents of the email.
         response = client.send_email(
             Destination={
-                'ToAddresses': [
+                'ToAddresses': 
                     send_to_email,
-                ],
             },
             Message={
                 'Body': {
