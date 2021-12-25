@@ -11,10 +11,14 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 url = 'https://www.ercot.com/content/cdr/html/dam_spp.html'
+#url= 'url='https://www.ercot.com/content/cdr/html/20211212_dam_spp.html'
+
 user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11'
 headers = {'User-Agent':user_agent,}
 gcontext = ssl.SSLContext()
-curtail_threshold = 55
+curtail_threshold = 70
+avg_threshold = 30
+
 
 def lambda_handler(event, context):
     
@@ -67,9 +71,11 @@ def lambda_handler(event, context):
     df = pd.DataFrame(output_rows, columns=table_headers)     
     df['HB_NORTH']=df['HB_NORTH'].astype(float)
     df['Hour Ending']=df['Hour Ending'].astype(int)
+    df = df[['Oper Day','Hour Ending', 'HB_NORTH']]
 
-    df['Curtail'] = df.apply(lambda row: 'Y' if row['HB_NORTH'] >=curtail_threshold  else 'N',
+    df['Curtail'] = df.apply(lambda row: 'Y' if row['HB_NORTH'] >=curtail_threshold  and df["HB_NORTH"].mean() >= avg_threshold  else 'N',
                      axis=1)
+
     total_hours_curtailed = 0
     sum_electricity_running = 0
     
@@ -80,8 +86,7 @@ def lambda_handler(event, context):
         else:
             sum_electricity_running += row['HB_NORTH']
     
-    df = df[['Oper Day','Hour Ending', 'HB_NORTH', 'Curtail']]
-
+    avg_electricity_running = sum_electricity_running/(24-total_hours_curtailed)
     html_table = dictionaryToHTMLTable(df.to_dict(orient='list'))
  
     # The HTML body of the email.
@@ -90,6 +95,7 @@ def lambda_handler(event, context):
     <body>
       <h1>Aloha Innoblock!</h1>
       <p>
+      <h4>Average electricity rate {avg_electricity_running:.2f}</h4>
       {html_table}
       </p>
     </body>
