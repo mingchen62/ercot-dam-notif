@@ -5,24 +5,25 @@ import ssl
 import logging
 import pandas as pd
 
-from send_email import send_email_via_ses, dictionaryToHTMLTable, SUPPORT, RECIPIENT
+from send_email import send_email_via_ses, dictionaryToHTMLTable, listToHTMLTable, SUPPORT, RECIPIENT
+from db_helper import update_table
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 url = 'https://www.ercot.com/content/cdr/html/dam_spp.html'
-#url= 'url='https://www.ercot.com/content/cdr/html/20211212_dam_spp.html'
+#url= 'https://www.ercot.com/content/cdr/html/20220124_dam_spp.html'
 
 user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11'
 headers = {'User-Agent':user_agent,}
 gcontext = ssl.SSLContext()
-curtail_threshold = 70
-avg_threshold = 30
+curtail_threshold = 75
+avg_threshold = 35
 
 
 def lambda_handler(event, context):
     
-    # retrieve Ercot DAM data
+    # Data retrieval( Ercot DAM data)
     try:
         request = req.Request(url,None,headers)
         response = req.urlopen(request, timeout = 100, context=gcontext)
@@ -46,7 +47,7 @@ def lambda_handler(event, context):
         'body': json.dumps('Empty ercot DAM table')
         }
 
-    # data preprocessing
+    # Data processing
     try:
         table_headers = []
         for tx in soup.find_all('th'):
@@ -78,25 +79,45 @@ def lambda_handler(event, context):
 
     total_hours_curtailed = 0
     sum_electricity_running = 0
-    
+    sum_electricity = 0
     for i, row in df.iterrows():
         oper_day = row['Oper Day']
+        sum_electricity += row['HB_NORTH']
         if row['Curtail'] == 'Y':
             total_hours_curtailed += 1
         else:
             sum_electricity_running += row['HB_NORTH']
     
+    avg_electricity = sum_electricity_running/24
     avg_electricity_running = sum_electricity_running/(24-total_hours_curtailed)
-    html_table = dictionaryToHTMLTable(df.to_dict(orient='list'))
  
-    # The HTML body of the email.
+    monthly_running_avg, monthly_uptime, yearly_running_avg, yearly_uptime = update_table(oper_day, avg_electricity_running, total_hours_curtailed, df.to_dict(orient='list'))
+    
+    # Data reporting
+    sla_header = ['Metric','Value']
+    sla_list =[
+        ["Yearly uptime", "{:.1%}".format(yearly_uptime)],
+        ["Yearly running average", "{:.2f}".format(yearly_running_avg)],
+        ["Monthly uptime", "{:.1%}".format(monthly_uptime)],
+        [ "Monthly running average", "{:.2f}".format(monthly_running_avg)],
+        ["Daily running average", "{:.2f}".format(avg_electricity_running)],
+        ["Daily Hours curtailed", str(total_hours_curtailed)]
+    ]
+    curtail_header = ['Hour Ending','HB_NORTH','Curtail']
+    curtail_list = df[curtail_header].values.tolist()
+
+    #  HTML body of the email.
     body_html = f"""<html>
     <head></head>
     <body>
       <h1>Aloha Innoblock!</h1>
       <p>
-      <h4>Average electricity rate {avg_electricity_running:.2f}</h4>
-      {html_table}
+      <h4>SLA Metrics</h4>
+      {listToHTMLTable(sla_list, sla_header)}
+      <p>
+      <h4>{oper_day} Curtailment Schedule</h4>
+      <p>
+      {listToHTMLTable(curtail_list, curtail_header)}
       </p>
     </body>
     </html>

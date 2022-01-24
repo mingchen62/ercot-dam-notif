@@ -57,16 +57,26 @@ f'''
 {''.join(self.rows)}
 </table>
 '''
-
-def dictionaryToHTMLTable( d):
-    html = HTML(Header = d.keys(),
+def listToHTMLTable( l, header):
+    html = HTML(Header = header,
+                tableStyles={'margin': '2px'},
+                trStyles={'background-color': '#7cc3a97d'})
+    for  row in l:
+        # last column is status. if status new, use a different color.
+        BGC = 'Lightgreen'
+        if row[-1] == 'Y':
+            BGC = 'red'
+        html.addRow(row, trStyles={'background-color' : BGC}, tdStyles={'padding': '1rem'})
+    return html
+        
+def dictionaryToHTMLTable( d, header):
+    html = HTML(Header = header,
                 tableStyles={'margin': '2px'},
                 trStyles={'background-color': '#7cc3a97d'})
     for i, row in enumerate(zip(*d.values())):
         # last column is status. if status new, use a different color.
-        if row[-1] == 'N':
-            BGC = 'Lightgreen'
-        else:
+        BGC = 'Lightgreen'
+        if row[-1] == 'Y':
             BGC = 'red'
         html.addRow(row, trStyles={'background-color' : BGC}, tdStyles={'padding': '1rem'})
     return html
