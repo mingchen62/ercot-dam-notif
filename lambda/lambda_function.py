@@ -12,18 +12,18 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 url = 'https://www.ercot.com/content/cdr/html/dam_spp.html'
-#url= 'https://www.ercot.com/content/cdr/html/20220124_dam_spp.html'
+#url= 'https://www.ercot.com/content/cdr/html/20220301_dam_spp.html'
 
 user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11'
 headers = {'User-Agent':user_agent,}
 gcontext = ssl.SSLContext()
-curtail_threshold = 75
+curtail_threshold = 80
 avg_threshold = 35
 
 
 def lambda_handler(event, context):
     
-    # Data retrieval( Ercot DAM data)
+    # retrieve Ercot DAM data
     try:
         request = req.Request(url,None,headers)
         response = req.urlopen(request, timeout = 100, context=gcontext)
@@ -47,7 +47,7 @@ def lambda_handler(event, context):
         'body': json.dumps('Empty ercot DAM table')
         }
 
-    # Data processing
+    # data preprocessing
     try:
         table_headers = []
         for tx in soup.find_all('th'):
@@ -72,7 +72,9 @@ def lambda_handler(event, context):
     df = pd.DataFrame(output_rows, columns=table_headers)     
     df['HB_NORTH']=df['HB_NORTH'].astype(float)
     df['Hour Ending']=df['Hour Ending'].astype(int)
-    df = df[['Oper Day','Hour Ending', 'HB_NORTH']]
+    df['Hour']=  df['Hour Ending'].apply(lambda x: f"{x-1}:01-{x}:00")
+
+    df = df[['Oper Day','Hour Ending', 'Hour','HB_NORTH']]
 
     df['Curtail'] = df.apply(lambda row: 'Y' if row['HB_NORTH'] >=curtail_threshold  and df["HB_NORTH"].mean() >= avg_threshold  else 'N',
                      axis=1)
@@ -90,10 +92,10 @@ def lambda_handler(event, context):
     
     avg_electricity = sum_electricity_running/24
     avg_electricity_running = sum_electricity_running/(24-total_hours_curtailed)
+    #html_table = dictionaryToHTMLTable(df.to_dict(orient='list'))
  
     monthly_running_avg, monthly_uptime, yearly_running_avg, yearly_uptime = update_table(oper_day, avg_electricity_running, total_hours_curtailed, df.to_dict(orient='list'))
-    
-    # Data reporting
+
     sla_header = ['Metric','Value']
     sla_list =[
         ["Yearly uptime", "{:.1%}".format(yearly_uptime)],
@@ -103,10 +105,10 @@ def lambda_handler(event, context):
         ["Daily running average", "{:.2f}".format(avg_electricity_running)],
         ["Daily Hours curtailed", str(total_hours_curtailed)]
     ]
-    curtail_header = ['Hour Ending','HB_NORTH','Curtail']
+    curtail_header = ['Hour Ending','Hour', 'HB_NORTH','Curtail']
     curtail_list = df[curtail_header].values.tolist()
 
-    #  HTML body of the email.
+    # The HTML body of the email.
     body_html = f"""<html>
     <head></head>
     <body>
