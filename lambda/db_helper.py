@@ -18,6 +18,7 @@ from config import (
 
     MONTHLY_CURTAIL_HRS_COLUMN,
     MONTHLY_RUNNING_AVG_COLUMN,
+    MONTHLY_AVG_COLUMN,
 
     YEARLY_CURTAIL_HRS_COLUMN,
     YEARLY_RUNNING_AVG_COLUMN,
@@ -87,12 +88,13 @@ def hours_in_the_year(open_day):
     return (dif_year.days+1)*24
 
 def get_monthly_metrics(d):
+    print(d, d.day)
     if d.day == 1: # start from scratch if first day of the month
-        return 0,0.0
+        return 0,0.0, 0.0
         
     yesterday = datetime.strftime(d - timedelta(days = 1), DT_FORMAT)
     item = _query(yesterday)
-    return item[MONTHLY_CURTAIL_HRS_COLUMN], item[MONTHLY_RUNNING_AVG_COLUMN]
+    return item[MONTHLY_CURTAIL_HRS_COLUMN], item[MONTHLY_RUNNING_AVG_COLUMN], item[MONTHLY_AVG_COLUMN]
 
 def get_yearly_metrics(d):
     if d.day == 1  and d.month == 1: # start from scratch  if first day of the year
@@ -102,40 +104,34 @@ def get_yearly_metrics(d):
     item = _query(yesterday)
     return item[YEARLY_CURTAIL_HRS_COLUMN], item[YEARLY_RUNNING_AVG_COLUMN]
 
-def update_table(open_day, daily_running_avg, daily_hours_curtailed, dam_data):
-    d = datetime.strptime(open_day, DT_FORMAT)
+def update_table(oper_day, daily_avg, daily_running_avg, daily_hours_curtailed, dam_data):
+    d = datetime.strptime(oper_day, DT_FORMAT)
 
-    monthly_curtail_hrs,monthly_running_avg  = get_monthly_metrics(d)
-    yearly_curtail_hrs,yearly_running_avg  = get_yearly_metrics(d)
+    monthly_curtail_hrs,monthly_running_avg, monthly_avg  = get_monthly_metrics(d)
 
-    # Calculate new metrics up to open_day
+    # Calculate new metrics up to oper_day
 
-    monthly_running_hours_prev = int(hours_in_the_month(open_day)- monthly_curtail_hrs-24) # excluding open_day
+    monthly_running_hours_prev = int(hours_in_the_month(oper_day)- monthly_curtail_hrs-24) # excluding oper_day
     monthly_running_sum_prev = monthly_running_hours_prev *monthly_running_avg
     monthly_running_sum = float(monthly_running_sum_prev) + (24-daily_hours_curtailed) *daily_running_avg 
     monthly_running_avg =  monthly_running_sum/(monthly_running_hours_prev +24-daily_hours_curtailed)
+    monthly_sum_prev = (hours_in_the_month(oper_day) -24) *float(monthly_avg)
+    monthly_avg =  (monthly_sum_prev+24*daily_avg)/float(hours_in_the_month(oper_day))
     monthly_curtail_hrs = monthly_curtail_hrs + daily_hours_curtailed
-    monthly_uptime = 1- float(monthly_curtail_hrs)/hours_in_the_month(open_day)
+    monthly_uptime = 1- float(monthly_curtail_hrs)/hours_in_the_month(oper_day)
 
-    yearly_running_hours_prev = int(hours_in_the_year(open_day)- yearly_curtail_hrs-24) # excluding open_day
-    yearly_running_sum_prev = yearly_running_hours_prev *yearly_running_avg
-    yearly_running_sum = float(yearly_running_sum_prev) + (24-daily_hours_curtailed) *daily_running_avg 
-    yearly_running_avg =  yearly_running_sum/(yearly_running_hours_prev +24-daily_hours_curtailed)
-    yearly_curtail_hrs = yearly_curtail_hrs + daily_hours_curtailed
-    yearly_uptime =    1- float(yearly_curtail_hrs)/hours_in_the_year(open_day)
-
+  
     # store
     item = {
-        DT_COLUMN:open_day,
+        DT_COLUMN:oper_day,
         DAILY_CURTAIL_HRS_COLUMN: int(daily_hours_curtailed),
         DAILY_RUNNING_AVG_COLUMN: float(daily_running_avg),
         MONTHLY_CURTAIL_HRS_COLUMN: int(monthly_curtail_hrs),
         MONTHLY_RUNNING_AVG_COLUMN: float(monthly_running_avg),
-        YEARLY_CURTAIL_HRS_COLUMN: int(yearly_curtail_hrs),
-        YEARLY_RUNNING_AVG_COLUMN: float(yearly_running_avg),
+        MONTHLY_AVG_COLUMN: float(monthly_avg),
         DAM_DATA_COLUMN: dam_data
     
     }
     #print(item)
     _insert(item)
-    return monthly_running_avg, monthly_uptime, yearly_running_avg, yearly_uptime
+    return monthly_curtail_hrs, monthly_running_avg, monthly_avg

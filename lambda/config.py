@@ -19,7 +19,7 @@ DAILY_RUNNING_AVG_COLUMN = 'daily_running_avg'
 
 MONTHLY_CURTAIL_HRS_COLUMN = 'monthly_curtail_hrs'
 MONTHLY_RUNNING_AVG_COLUMN = 'monthly_running_avg'
-
+MONTHLY_AVG_COLUMN = 'monthly_avg'
 YEARLY_CURTAIL_HRS_COLUMN = 'yearly_curtail_hrs'
 YEARLY_RUNNING_AVG_COLUMN = 'yearly_running_avg'
 
