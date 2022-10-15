@@ -105,18 +105,21 @@ def get_yearly_metrics(d):
     return item[YEARLY_CURTAIL_HRS_COLUMN], item[YEARLY_RUNNING_AVG_COLUMN]
 
 def update_table(oper_day, daily_avg, daily_running_avg, daily_hours_curtailed, dam_data):
+    #print("oper day", oper_day)
     d = datetime.strptime(oper_day, DT_FORMAT)
 
     monthly_curtail_hrs,monthly_running_avg, monthly_avg  = get_monthly_metrics(d)
 
-    # Calculate new metrics up to oper_day
+    # Calculate new metrics up to open_day
 
-    monthly_running_hours_prev = int(hours_in_the_month(oper_day)- monthly_curtail_hrs-24) # excluding oper_day
+    monthly_running_hours_prev = int(hours_in_the_month(oper_day)- monthly_curtail_hrs-24) # excluding open_day
     monthly_running_sum_prev = monthly_running_hours_prev *monthly_running_avg
     monthly_running_sum = float(monthly_running_sum_prev) + (24-daily_hours_curtailed) *daily_running_avg 
     monthly_running_avg =  monthly_running_sum/(monthly_running_hours_prev +24-daily_hours_curtailed)
     monthly_sum_prev = (hours_in_the_month(oper_day) -24) *float(monthly_avg)
+
     monthly_avg =  (monthly_sum_prev+24*daily_avg)/float(hours_in_the_month(oper_day))
+
     monthly_curtail_hrs = monthly_curtail_hrs + daily_hours_curtailed
     monthly_uptime = 1- float(monthly_curtail_hrs)/hours_in_the_month(oper_day)
 

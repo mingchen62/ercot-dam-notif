@@ -11,7 +11,8 @@ from db_helper import update_table
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-url = 'https://www.ercot.com/content/cdr/html/dam_spp.html'
+DEFAULT_URL = 'https://www.ercot.com/content/cdr/html/dam_spp.html'
+
 #url= 'https://www.ercot.com/content/cdr/html/20221001_dam_spp.html'
 
 user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11'
@@ -22,7 +23,26 @@ avg_threshold = 35
 
 
 def lambda_handler(event, context):
-    
+    url = DEFAULT_URL
+    actual_flag = False
+    # Process input
+    if 'queryStringParameters'in event:
+        # default: Day ahead
+        
+        if 'oper_day' in event['queryStringParameters']:
+            oper_day =  event['queryStringParameters']['oper_day']
+            url= f'https://www.ercot.com/content/cdr/html/{oper_day}_dam_spp.html'
+            
+        # default: schdule on curtailment threshold
+        
+        # record the actual curtailment hours  
+        if 'start' in event['queryStringParameters'] and 'end' in event['queryStringParameters']:
+            logger.info(event['queryStringParameters'])
+            actual_flag = True
+        
+            curtail_start = int(event['queryStringParameters']['start'])
+            curtail_end = int(event['queryStringParameters']['end'])
+           
     # retrieve Ercot DAM data
     try:
         request = req.Request(url,None,headers)
@@ -75,9 +95,15 @@ def lambda_handler(event, context):
     df['Hour']=  df['Hour Ending'].apply(lambda x: f"{x-1}:01-{x}:00")
 
     df = df[['Oper Day','Hour Ending', 'Hour','LZ_NORTH']]
-
-    df['Curtail'] = df.apply(lambda row: 'Y' if row['LZ_NORTH'] >=curtail_threshold  and df["LZ_NORTH"].mean() >= avg_threshold  else 'N',
+    
+    if actual_flag:
+        df['Curtail'] = df.apply(lambda row: 'Y' if row['Hour Ending'] > curtail_start and row["Hour Ending"] <= curtail_end  else 'N',
                      axis=1)
+    else:
+        df['Curtail'] = df.apply(lambda row: 'Y' if row['LZ_NORTH'] >=curtail_threshold and df["LZ_NORTH"].mean() >= avg_threshold  else 'N',
+                     axis=1)
+    logger.info(event)
+
 
     total_hours_curtailed = 0
     sum_electricity_running = 0
@@ -111,6 +137,9 @@ def lambda_handler(event, context):
     curtail_list = df[curtail_header].values.tolist()
 
     # The HTML body of the email.
+    subject = 'Scheduled Curtailment' 
+    if actual_flag: 
+        subject = 'Actual Curtailment' 
     body_html = f"""<html>
     <head></head>
     <body>
@@ -119,14 +148,14 @@ def lambda_handler(event, context):
       <h4>SLA Metrics</h4>
       {listToHTMLTable(sla_list, sla_header)}
       <p>
-      <h4>{oper_day} Curtailment Schedule</h4>
+      <h4>{oper_day} {subject}</h4>
       <p>
       {listToHTMLTable(curtail_list, curtail_header)}
       </p>
     </body>
     </html>
     """ 
-    send_email_via_ses(RECIPIENT,   oper_day+ " Curtailment: "+str(total_hours_curtailed), body_html )   
+    send_email_via_ses(RECIPIENT,   oper_day+ " " + subject+ " "+str(total_hours_curtailed), body_html )   
     return {
         'statusCode': 200,
         'body': json.dumps({'Hours to be curtailed [0-24]': str(df['Curtail'])})
